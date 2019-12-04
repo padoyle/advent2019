@@ -3,7 +3,10 @@ use std::collections::HashMap;
 static INPUT_STR: &str = include_str!("../input.txt");
 
 fn main() {
-    println!("Result: {}", get_closest_intersection(INPUT_STR));
+    let grid = generate_grid(INPUT_STR);
+
+    println!("P1 Result: {}", get_closest_intersection(&grid));
+    println!("P2 Result: {}", get_fewest_steps(&grid));
 }
 
 type Point = (i32, i32);
@@ -24,26 +27,38 @@ pub fn get_next_point(path: &str) -> Point {
     }
 }
 
-type Grid = HashMap<Point, usize>;
+type WireStep = Vec<usize>;
+type Grid = HashMap<Point, WireStep>;
 
 fn get_wire(input: &str) -> Vec<Point> {
     input.split(',').map(get_next_point).collect()
 }
 
-fn traverse_wire(grid: &mut Grid, wire: &[Point]) {
+fn traverse_wire(grid: &mut Grid, wire: &[Point], wire_index: usize) {
     let mut position = (0, 0);
+    let mut step_count = 0;
     for delta in wire {
         let step = (delta.0.signum(), delta.1.signum());
         let target = (position.0 + delta.0, position.1 + delta.1);
 
         while position != target {
+            step_count += 1;
             position = (position.0 + step.0, position.1 + step.1);
 
-            let new_value = match grid.get(&position) {
-                Some(&value) => value + 1,
-                None => 1,
-            };
-            grid.insert(position, new_value);
+            if let Some(wires) = grid.get_mut(&position) {
+                let same_wire = wires[wire_index];
+                let new_value = if same_wire == 0 {
+                    step_count
+                } else {
+                    std::cmp::min(same_wire, step_count)
+                };
+                wires[wire_index] = new_value;
+            } else {
+                let mut new_value = vec![0, 0];
+                new_value[wire_index] = step_count;
+
+                grid.insert(position, new_value);
+            }
         }
     }
 }
@@ -62,7 +77,7 @@ fn print_grid(grid: &Grid) {
                 print!(
                     "{} ",
                     grid.get(&(x, y))
-                        .map(usize::to_string)
+                        .map(|wires| count_hits(wires).to_string())
                         .unwrap_or(".".to_string())
                 );
             }
@@ -76,28 +91,55 @@ fn read_wires(value: &str) -> Vec<Vec<Point>> {
     value.lines().map(get_wire).collect()
 }
 
-pub fn find_intersections(grid: Grid, min_wires: usize) -> Vec<Point> {
-    grid.iter()
-        .filter(|(point, wires)| *wires >= &min_wires && *point != &(0, 0))
-        .map(|(point, _wires)| point.clone())
+fn count_hits(wire_step: &[usize]) -> usize {
+    let mut hits = 0;
+    for step in wire_step {
+        if step > &0 {
+            hits += 1;
+        }
+    }
+
+    hits
+}
+
+pub fn find_intersections(grid: &Grid, min_wires: usize) -> Vec<Point> {
+    grid.into_iter()
+        .filter(|(point, wires)| count_hits(wires) >= min_wires && *point != &(0, 0))
+        .map(|(point, wires)| {
+            println!("Found hit {:?}: {:?}", point, wires);
+            point.clone()
+        })
         .collect()
 }
 
-pub fn get_closest_intersection(input_str: &str) -> i32 {
+pub fn generate_grid(input_str: &str) -> Grid {
     let wires = read_wires(input_str);
     let mut grid = HashMap::new();
-    for wire in wires {
-        traverse_wire(&mut grid, wire.as_slice());
+    for (i, wire) in wires.iter().enumerate() {
+        // println!("wire {}", i);
+        traverse_wire(&mut grid, wire.as_slice(), i);
     }
-    println!("grid: {:?}", grid);
-    print_grid(&grid);
-    println!("value at (146, 11): {:?}", grid.get(&(146, 11)));
+    // print_grid(&grid);
+
+    grid
+}
+
+pub fn get_closest_intersection(grid: &Grid) -> i32 {
     let intersections = find_intersections(grid, 2);
-    println!("intersections: {:?}", intersections);
 
     intersections
         .iter()
         .map(|point| point.0.abs() + point.1.abs())
+        .min()
+        .expect("No intersections found")
+}
+
+pub fn get_fewest_steps(grid: &Grid) -> usize {
+    let intersections = find_intersections(grid, 2);
+
+    intersections
+        .iter()
+        .map(|point| grid.get(point).unwrap().iter().sum())
         .min()
         .expect("No intersections found")
 }
@@ -107,42 +149,66 @@ mod test {
     use super::*;
 
     #[test]
+    fn count_hits_test() {
+        assert_eq!(0, count_hits(&vec![0, 0]));
+        assert_eq!(1, count_hits(&vec![0, 3]));
+        assert_eq!(1, count_hits(&vec![1, 0]));
+        assert_eq!(2, count_hits(&vec![8, 17]));
+    }
+
+    #[test]
     fn simple_example() {
-        let expected = 6;
-        let actual = get_closest_intersection(
+        let grid = generate_grid(
             r#"R8,U5,L5,D3
 U7,R6,D4,L4"#,
         );
-        assert_eq!(expected, actual);
+        let expected_closest = 6;
+        let actual_closest = get_closest_intersection(&grid);
+        assert_eq!(expected_closest, actual_closest);
+
+        let expexted_fewest = 30;
+        let actual_fewest = get_fewest_steps(&grid);
+        assert_eq!(expexted_fewest, actual_fewest);
     }
 
     #[test]
     fn experiment() {
-        let expected = 6;
-        let actual = get_closest_intersection(
+        let grid = generate_grid(
             r#"R8,U5,L5,D3
 U7,R6,D14,L4"#,
         );
-        assert_eq!(expected, actual);
+        let expected_closest = 6;
+        let actual_closest = get_closest_intersection(&grid);
+        assert_eq!(expected_closest, actual_closest);
     }
 
     #[test]
     fn ex1() {
-        let expected = 159;
-        let actual = get_closest_intersection(
+        let grid = generate_grid(
             r#"R75,D30,R83,U83,L12,D49,R71,U7,L72
 U62,R66,U55,R34,D71,R55,D58,R83"#,
         );
-        assert_eq!(expected, actual);
+        let expected_closest = 159;
+        let actual_closest = get_closest_intersection(&grid);
+        assert_eq!(expected_closest, actual_closest);
+
+        let expexted_fewest = 610;
+        let actual_fewest = get_fewest_steps(&grid);
+        assert_eq!(expexted_fewest, actual_fewest);
     }
 
     #[test]
     fn ex2() {
-        let expected = 135;
-        let actual = get_closest_intersection(
+        let grid = generate_grid(
             r#"R98,U47,R26,D63,R33,U87,L62,D20,R33,U53,R51
 U98,R91,D20,R16,D67,R40,U7,R15,U6,R7"#,
         );
-        assert_eq!(expected, actual);
+        let expected_closest = 135;
+        let actual_closest = get_closest_intersection(&grid);
+        assert_eq!(expected_closest, actual_closest);
+
+        let expexted_fewest = 410;
+        let actual_fewest = get_fewest_steps(&grid);
+        assert_eq!(expexted_fewest, actual_fewest);
     }
 }
