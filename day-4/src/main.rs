@@ -18,8 +18,10 @@ fn meets_criteria(option: i32) -> bool {
     let mut ascending = true;
     for i in 0..5 {
         if digits[i] == digits[i + 1] {
-            // println!("Doubles: {:?}", );
-            has_valid_doubles = i == 4 || digits[i + 2] != digits[i];
+            let prev_is_different = i == 0 || digits[i - 1] != digits[i];
+            let next_is_different = i == 4 || digits[i + 2] != digits[i];
+
+            has_valid_doubles |= prev_is_different && next_is_different;
         }
         if digits[i] > digits[i + 1] {
             ascending = false;
@@ -51,11 +53,14 @@ mod test {
 
     #[test]
     fn examples() {
-        assert_eq!(meets_criteria(111111), true);
+        assert_eq!(meets_criteria(111111), false);
         assert_eq!(meets_criteria(223450), false);
         assert_eq!(meets_criteria(123789), false);
         assert_eq!(meets_criteria(112233), true);
         assert_eq!(meets_criteria(123444), false);
+        assert_eq!(meets_criteria(111234), false);
         assert_eq!(meets_criteria(111122), true);
+        println!("Final test");
+        assert_eq!(meets_criteria(112222), true);
     }
 }
