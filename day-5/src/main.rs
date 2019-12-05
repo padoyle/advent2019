@@ -4,18 +4,18 @@ static INPUT_STR: &str = include_str!("../input.txt");
 
 fn main() {
     println!("Intcode input: {}", INPUT_STR);
-    run_program(INPUT_STR);
+    run_program(INPUT_STR, 1);
 }
 
-pub fn run_program(input: &str) {
-    let program_data: Vec<isize> = input
+pub fn run_program(program_str: &str, input: isize) {
+    let program_data: Vec<isize> = program_str
         .split(',')
         .map(|token| token.parse::<isize>().expect("Could not parse input token"))
         .collect();
 
-    let program = IntcodeProgram::new(program_data);
-    let (result, _) = program.run(12, 2);
-    println!("P1 result: {}", result);
+    let program = IntcodeProgram::new(program_data, input);
+    let output = program.run();
+    println!("P1 result: {:?}", output);
 }
 
 pub fn parse_op(opcode: isize) -> (usize, Vec<ArgMode>) {
@@ -24,7 +24,7 @@ pub fn parse_op(opcode: isize) -> (usize, Vec<ArgMode>) {
         1 | 2 => 3,
         3 | 4 => 1,
         99 => 0,
-        _ => unreachable!("Unknown opcode {}", op),
+        _ => unreachable!("Unknown opcode {}", opcode),
     };
     let mut remaining = opcode / 100;
 
@@ -44,18 +44,20 @@ const MODE_IMM: ArgMode = 1;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct IntcodeProgram {
-    exec_ptr: usize,
     ops: Vec<isize>,
-    input: Vec<isize>,
+    exec_ptr: usize,
+
+    input: isize,
     output: Vec<isize>,
 }
 
 impl IntcodeProgram {
-    pub fn new(program: Vec<isize>) -> Self {
+    pub fn new(ops: Vec<isize>, input: isize) -> Self {
         Self {
+            ops,
             exec_ptr: 0,
-            ops: program,
-            input: Vec::new(),
+
+            input,
             output: Vec::new(),
         }
     }
@@ -99,33 +101,48 @@ impl IntcodeProgram {
         self.exec_ptr += 3;
     }
 
+    fn op_input(&mut self, _arg_modes: Vec<ArgMode>) {
+        let ptr = self.exec_ptr;
+        let dest = self.ops[ptr] as usize;
+
+        self.ops[dest] = self.input;
+
+        self.exec_ptr += 1;
+    }
+
+    fn op_output(&mut self, arg_modes: Vec<ArgMode>) {
+        let ptr = self.exec_ptr;
+        let output_value = self.get_arg(ptr, arg_modes[0]);
+
+        self.output.push(output_value);
+        self.exec_ptr += 1;
+    }
+
     fn run_instruction(&mut self) {
+        println!("Run instruction @ {}", self.exec_ptr + 1);
         let (opcode, arg_modes) = parse_op(self.ops[self.exec_ptr]);
         self.exec_ptr += 1;
 
         match opcode {
             1 => self.op_add(arg_modes),
             2 => self.op_mult(arg_modes),
-            3 => unimplemented!("input"),
-            4 => unimplemented!("output"),
+            3 => self.op_input(arg_modes),
+            4 => self.op_output(arg_modes),
             99 => {
                 println!("Program finished!");
-                self.exec_ptr += 1;
+                self.exec_ptr = self.ops.len();
             }
             _ => unreachable!("Unrecognized opcode {}", opcode),
         };
     }
 
-    pub fn run(self, x: isize, y: isize) -> (isize, Self) {
+    pub fn run(self) -> Vec<isize> {
         let mut result = self;
-        result.ops[1] = x;
-        result.ops[2] = y;
-
         while result.has_next_instruction() {
             result.run_instruction();
         }
 
-        (result.ops[0], result)
+        result.output
     }
 }
 
@@ -148,24 +165,5 @@ mod test {
         assert_eq!((2, vec![1, 0, 0]), parse_op(102));
         assert_eq!((4, vec![1]), parse_op(104));
         assert_eq!((3, vec![0]), parse_op(3));
-    }
-
-    #[test]
-    fn examples() {
-        let expected = IntcodeProgram::new(vec![2, 0, 0, 0, 99]);
-        let (_, actual) = IntcodeProgram::new(vec![1, 0, 0, 0, 99]).run(0, 0);
-        assert_eq!(expected.ops, actual.ops);
-
-        let expected = IntcodeProgram::new(vec![2, 3, 0, 6, 99]);
-        let (_, actual) = IntcodeProgram::new(vec![2, 3, 0, 3, 99]).run(3, 0);
-        assert_eq!(expected.ops, actual.ops);
-
-        let expected = IntcodeProgram::new(vec![2, 4, 4, 5, 99, 9801]);
-        let (_, actual) = IntcodeProgram::new(vec![2, 4, 4, 5, 99, 0]).run(4, 4);
-        assert_eq!(expected.ops, actual.ops);
-
-        let expected = IntcodeProgram::new(vec![30, 1, 1, 4, 2, 5, 6, 0, 99]);
-        let (_, actual) = IntcodeProgram::new(vec![1, 1, 1, 4, 99, 5, 6, 0, 99]).run(1, 1);
-        assert_eq!(expected.ops, actual.ops);
     }
 }
