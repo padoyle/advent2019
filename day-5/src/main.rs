@@ -36,41 +36,51 @@ impl IntcodeProgram {
         }
     }
 
-    pub fn has_next_instruction(&self) -> bool {
+    fn has_next_instruction(&self) -> bool {
         self.exec_ptr < self.ops.len()
     }
 
-    pub fn run_instruction(self) -> Self {
-        let mut ptr = self.exec_ptr;
-        let instruction = if self.ops.len() - ptr >= 4 {
-            ptr += 4;
-            self.ops[(ptr - 4)..ptr].to_vec()
+    fn op_add(&mut self) {
+        let ptr = self.exec_ptr;
+        if let [a, b, dest] = self.ops[ptr..ptr + 3] {
+            self.ops[dest] = self.ops[a] + self.ops[b];
         } else {
-            ptr += 1;
-            vec![99, 0, 0, 0]
-        };
-
-        let mut ops = self.ops;
-        // Apply the op codes to the result, which we keep mutable
-        match instruction.as_slice() {
-            [1, a, b, dest] => {
-                ops[*dest] = ops[*a] + ops[*b];
-            }
-            [2, a, b, dest] => {
-                ops[*dest] = ops[*a] * ops[*b];
-            }
-            [99, _, _, _] => {
-                // println!("Program finished");
-            }
-            _ => panic!("Unexpected op code {}", ops[ptr]),
-        };
-
-        Self {
-            exec_ptr: ptr,
-            ops,
-            input: self.input,
-            output: self.output,
+            unreachable!("add: Wrong number of args")
         }
+        self.exec_ptr += 3;
+    }
+
+    fn op_mult(&mut self) {
+        let ptr = self.exec_ptr;
+        if let [a, b, dest] = self.ops[ptr..ptr + 3] {
+            self.ops[dest] = self.ops[a] * self.ops[b];
+        } else {
+            unreachable!("add: Wrong number of args")
+        }
+        self.exec_ptr += 3;
+    }
+
+    fn run_instruction(&mut self) {
+        let opcode = self.ops[self.exec_ptr];
+        self.exec_ptr += 1;
+
+        match opcode {
+            1 => self.op_add(),
+            2 => self.op_mult(),
+            // 3 => {
+            //     // do something with input
+            //     ptr + 1
+            // }
+            // 4 => {
+            //     // do something with output
+            //     ptr + 1
+            // }
+            99 => {
+                println!("Program finished!");
+                self.exec_ptr += 1;
+            }
+            _ => unreachable!("Unrecognized opcode {}", opcode),
+        };
     }
 
     pub fn run(self, x: usize, y: usize) -> (usize, Self) {
@@ -79,7 +89,7 @@ impl IntcodeProgram {
         result.ops[2] = y;
 
         while result.has_next_instruction() {
-            result = result.run_instruction();
+            result.run_instruction();
         }
 
         (result.ops[0], result)
