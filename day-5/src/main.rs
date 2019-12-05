@@ -68,8 +68,10 @@ impl IntcodeProgram {
         if mode == MODE_POS {
             let arg_value = self.ops[ptr] as usize;
             self.ops[arg_value]
-        } else {
+        } else if mode == MODE_IMM {
             self.ops[ptr]
+        } else {
+            unreachable!("invalid arg mode {}", mode);
         }
     }
 
@@ -134,8 +136,6 @@ impl fmt::Display for IntcodeProgram {
         write!(f, "{}", as_string.join(","))
     }
 }
-
-// P1 answer: 5482655
 
 #[cfg(test)]
 mod test {
