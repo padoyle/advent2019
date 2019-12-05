@@ -8,9 +8,9 @@ fn main() {
 }
 
 pub fn run_program(input: &str) {
-    let program_data: Vec<usize> = input
+    let program_data: Vec<isize> = input
         .split(',')
-        .map(|token| token.parse::<usize>().expect("Could not parse input token"))
+        .map(|token| token.parse::<isize>().expect("Could not parse input token"))
         .collect();
 
     let program = IntcodeProgram::new(program_data);
@@ -18,16 +18,40 @@ pub fn run_program(input: &str) {
     println!("P1 result: {}", result);
 }
 
+pub fn parse_op(opcode: isize) -> (usize, Vec<ArgMode>) {
+    let op = (opcode % 100) as usize;
+    let num_args = match op {
+        1 | 2 => 3,
+        3 | 4 => 1,
+        99 => 0,
+        _ => unreachable!("Unknown opcode {}", op),
+    };
+    let mut remaining = opcode / 100;
+
+    let mut arg_modes = vec![0; num_args];
+    for i in 0..num_args {
+        arg_modes[i] = (remaining % 10) as ArgMode;
+        remaining /= 10;
+    }
+
+    (op, arg_modes)
+}
+
+type ArgMode = u8;
+
+const MODE_POS: ArgMode = 0;
+const MODE_IMM: ArgMode = 1;
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct IntcodeProgram {
     exec_ptr: usize,
-    ops: Vec<usize>,
-    input: Vec<usize>,
-    output: Vec<usize>,
+    ops: Vec<isize>,
+    input: Vec<isize>,
+    output: Vec<isize>,
 }
 
 impl IntcodeProgram {
-    pub fn new(program: Vec<usize>) -> Self {
+    pub fn new(program: Vec<isize>) -> Self {
         Self {
             exec_ptr: 0,
             ops: program,
@@ -40,41 +64,48 @@ impl IntcodeProgram {
         self.exec_ptr < self.ops.len()
     }
 
-    fn op_add(&mut self) {
-        let ptr = self.exec_ptr;
-        if let [a, b, dest] = self.ops[ptr..ptr + 3] {
-            self.ops[dest] = self.ops[a] + self.ops[b];
+    fn get_arg(&self, ptr: usize, mode: ArgMode) -> isize {
+        if mode == MODE_POS {
+            let arg_value = self.ops[ptr] as usize;
+            self.ops[arg_value]
         } else {
-            unreachable!("add: Wrong number of args")
+            self.ops[ptr]
         }
+    }
+
+    fn op_add(&mut self, arg_modes: Vec<ArgMode>) {
+        let ptr = self.exec_ptr;
+        let a = self.get_arg(ptr, arg_modes[0]);
+        let b = self.get_arg(ptr + 1, arg_modes[1]);
+
+        // arg 3 is always positional, and works a bit differently since
+        // we store the value instead of reading it
+        let dest = self.ops[ptr + 2] as usize;
+        self.ops[dest] = a + b;
         self.exec_ptr += 3;
     }
 
-    fn op_mult(&mut self) {
+    fn op_mult(&mut self, arg_modes: Vec<ArgMode>) {
         let ptr = self.exec_ptr;
-        if let [a, b, dest] = self.ops[ptr..ptr + 3] {
-            self.ops[dest] = self.ops[a] * self.ops[b];
-        } else {
-            unreachable!("add: Wrong number of args")
-        }
+        let a = self.get_arg(ptr, arg_modes[0]);
+        let b = self.get_arg(ptr + 1, arg_modes[1]);
+
+        // arg 3 is always positional, and works a bit differently since
+        // we store the value instead of reading it
+        let dest = self.ops[ptr + 2] as usize;
+        self.ops[dest] = a * b;
         self.exec_ptr += 3;
     }
 
     fn run_instruction(&mut self) {
-        let opcode = self.ops[self.exec_ptr];
+        let (opcode, arg_modes) = parse_op(self.ops[self.exec_ptr]);
         self.exec_ptr += 1;
 
         match opcode {
-            1 => self.op_add(),
-            2 => self.op_mult(),
-            // 3 => {
-            //     // do something with input
-            //     ptr + 1
-            // }
-            // 4 => {
-            //     // do something with output
-            //     ptr + 1
-            // }
+            1 => self.op_add(arg_modes),
+            2 => self.op_mult(arg_modes),
+            3 => unimplemented!("input"),
+            4 => unimplemented!("output"),
             99 => {
                 println!("Program finished!");
                 self.exec_ptr += 1;
@@ -83,7 +114,7 @@ impl IntcodeProgram {
         };
     }
 
-    pub fn run(self, x: usize, y: usize) -> (usize, Self) {
+    pub fn run(self, x: isize, y: isize) -> (isize, Self) {
         let mut result = self;
         result.ops[1] = x;
         result.ops[2] = y;
@@ -109,6 +140,15 @@ impl fmt::Display for IntcodeProgram {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn opcodes() {
+        assert_eq!((2, vec![1, 1, 1]), parse_op(11102));
+        assert_eq!((1, vec![0, 1, 0]), parse_op(1001));
+        assert_eq!((2, vec![1, 0, 0]), parse_op(102));
+        assert_eq!((4, vec![1]), parse_op(104));
+        assert_eq!((3, vec![0]), parse_op(3));
+    }
 
     #[test]
     fn examples() {
