@@ -16,18 +16,17 @@ const YOU: &str = "YOU";
 const SANTA: &str = "SAN";
 
 fn populate_orbits(input: &'static str) -> Orbits {
-    let mut orbits = HashMap::new();
-
-    for line in input.lines() {
-        let tokens: Vec<&'static str> = line.split(')').collect();
-        if let [center, orbiter] = tokens.as_slice() {
-            orbits.insert(*orbiter, *center);
-        } else {
-            unreachable!("Invalid input format: {}", line);
-        }
-    }
-
-    orbits
+    input
+        .lines()
+        .map(|line| {
+            let tokens: Vec<&'static str> = line.split(')').collect();
+            if let [center, orbiter] = tokens.as_slice() {
+                (*orbiter, *center)
+            } else {
+                unreachable!("Invalid input format: {}", line)
+            }
+        })
+        .collect()
 }
 
 fn find_checksum(orbits: &Orbits) -> usize {
