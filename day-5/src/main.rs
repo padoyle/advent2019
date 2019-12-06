@@ -4,18 +4,24 @@ static INPUT_STR: &str = include_str!("../input.txt");
 
 fn main() {
     println!("Intcode input: {}", INPUT_STR);
-    run_program(INPUT_STR, 1);
+
+    println!("Part 1:");
+    let output = run_program(INPUT_STR, 1);
+    println!("{:?}", output);
+
+    println!("Part 2:");
+    let output = run_program(INPUT_STR, 5);
+    println!("{:?}", output);
 }
 
-pub fn run_program(program_str: &str, input: isize) {
+pub fn run_program(program_str: &str, input: isize) -> Vec<isize> {
     let program_data: Vec<isize> = program_str
         .split(',')
         .map(|token| token.parse::<isize>().expect("Could not parse input token"))
         .collect();
 
     let program = IntcodeProgram::new(program_data, input);
-    let output = program.run();
-    println!("P1 result: {:?}", output);
+    program.run()
 }
 
 pub fn parse_op(opcode: isize) -> (usize, Vec<ArgMode>) {
@@ -23,6 +29,8 @@ pub fn parse_op(opcode: isize) -> (usize, Vec<ArgMode>) {
     let num_args = match op {
         1 | 2 => 3,
         3 | 4 => 1,
+        5 | 6 => 2,
+        7 | 8 => 3,
         99 => 0,
         _ => unreachable!("Unknown opcode {}", opcode),
     };
@@ -118,8 +126,57 @@ impl IntcodeProgram {
         self.exec_ptr += 1;
     }
 
+    fn op_jump_if_true(&mut self, arg_modes: Vec<ArgMode>) {
+        let ptr = self.exec_ptr;
+        let condition = self.get_arg(ptr, arg_modes[0]) != 0;
+
+        if condition {
+            // Jump to the designated location
+            self.exec_ptr = self.get_arg(ptr + 1, arg_modes[1]) as usize;
+        } else {
+            // Move on to the next op
+            self.exec_ptr += 2;
+        }
+    }
+
+    fn op_jump_if_false(&mut self, arg_modes: Vec<ArgMode>) {
+        let ptr = self.exec_ptr;
+        let condition = self.get_arg(ptr, arg_modes[0]) == 0;
+
+        if condition {
+            // Jump to the designated location
+            self.exec_ptr = self.get_arg(ptr + 1, arg_modes[1]) as usize;
+        } else {
+            // Move on to the next op
+            self.exec_ptr += 2;
+        }
+    }
+
+    fn op_less_than(&mut self, arg_modes: Vec<ArgMode>) {
+        let ptr = self.exec_ptr;
+        let a = self.get_arg(ptr, arg_modes[0]);
+        let b = self.get_arg(ptr + 1, arg_modes[1]);
+
+        let result = if a < b { 1 } else { 0 };
+        let dest = self.ops[ptr + 2] as usize;
+        self.ops[dest] = result;
+
+        self.exec_ptr += 3;
+    }
+
+    fn op_equals(&mut self, arg_modes: Vec<ArgMode>) {
+        let ptr = self.exec_ptr;
+        let a = self.get_arg(ptr, arg_modes[0]);
+        let b = self.get_arg(ptr + 1, arg_modes[1]);
+
+        let result = if a == b { 1 } else { 0 };
+        let dest = self.ops[ptr + 2] as usize;
+        self.ops[dest] = result;
+
+        self.exec_ptr += 3;
+    }
+
     fn run_instruction(&mut self) {
-        println!("Run instruction @ {}", self.exec_ptr + 1);
         let (opcode, arg_modes) = parse_op(self.ops[self.exec_ptr]);
         self.exec_ptr += 1;
 
@@ -128,6 +185,10 @@ impl IntcodeProgram {
             2 => self.op_mult(arg_modes),
             3 => self.op_input(arg_modes),
             4 => self.op_output(arg_modes),
+            5 => self.op_jump_if_true(arg_modes),
+            6 => self.op_jump_if_false(arg_modes),
+            7 => self.op_less_than(arg_modes),
+            8 => self.op_equals(arg_modes),
             99 => {
                 println!("Program finished!");
                 self.exec_ptr = self.ops.len();
@@ -165,5 +226,49 @@ mod test {
         assert_eq!((2, vec![1, 0, 0]), parse_op(102));
         assert_eq!((4, vec![1]), parse_op(104));
         assert_eq!((3, vec![0]), parse_op(3));
+    }
+
+    #[test]
+    fn p2_78examples() {
+        let pos_equal = "3,9,8,9,10,9,4,9,99,-1,8";
+        assert_eq!(run_program(pos_equal, 3), vec![0]);
+        assert_eq!(run_program(pos_equal, 8), vec![1]);
+        assert_eq!(run_program(pos_equal, 17), vec![0]);
+
+        let pos_less_than = "3,9,7,9,10,9,4,9,99,-1,8";
+        assert_eq!(run_program(pos_less_than, 3), vec![1]);
+        assert_eq!(run_program(pos_less_than, 8), vec![0]);
+        assert_eq!(run_program(pos_less_than, 17), vec![0]);
+
+        let imm_equal = "3,3,1108,-1,8,3,4,3,99";
+        assert_eq!(run_program(imm_equal, 3), vec![0]);
+        assert_eq!(run_program(imm_equal, 8), vec![1]);
+        assert_eq!(run_program(imm_equal, 17), vec![0]);
+
+        let imm_less_than = "3,3,1107,-1,8,3,4,3,99";
+        assert_eq!(run_program(imm_less_than, 3), vec![1]);
+        assert_eq!(run_program(imm_less_than, 8), vec![0]);
+        assert_eq!(run_program(imm_less_than, 17), vec![0]);
+    }
+
+    #[test]
+    fn p2_jump_examples() {
+        let pos_jump = "3,12,6,12,15,1,13,14,13,4,13,99,-1,0,1,9";
+        assert_eq!(run_program(pos_jump, 0), vec![0]);
+        assert_eq!(run_program(pos_jump, -8), vec![1]);
+        assert_eq!(run_program(pos_jump, 17), vec![1]);
+
+        let imm_jump = "3,3,1105,-1,9,1101,0,0,12,4,12,99,1";
+        assert_eq!(run_program(imm_jump, 0), vec![0]);
+        assert_eq!(run_program(imm_jump, -8), vec![1]);
+        assert_eq!(run_program(imm_jump, 17), vec![1]);
+    }
+
+    #[test]
+    fn p2_big_example() {
+        let program = "3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99";
+        assert_eq!(run_program(program, 0), vec![999]);
+        assert_eq!(run_program(program, 8), vec![1000]);
+        assert_eq!(run_program(program, 17), vec![1001]);
     }
 }
