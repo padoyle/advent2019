@@ -27,12 +27,18 @@ const MODE_POS: ArgMode = 0;
 const MODE_IMM: ArgMode = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IntcodeResult {
+    Suspend(isize),
+    Halt,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IntcodeProgram {
     ops: Vec<isize>,
     exec_ptr: usize,
 
     input: Vec<isize>,
-    output: Vec<isize>,
+    output: Option<isize>,
 }
 
 impl IntcodeProgram {
@@ -42,7 +48,7 @@ impl IntcodeProgram {
             exec_ptr: 0,
 
             input: Vec::new(),
-            output: Vec::new(),
+            output: None,
         }
     }
 
@@ -101,7 +107,7 @@ impl IntcodeProgram {
         let ptr = self.exec_ptr;
         let output_value = self.get_arg(ptr, arg_modes[0]);
 
-        self.output.push(output_value);
+        self.output = Some(output_value);
         self.exec_ptr += 1;
     }
 
@@ -175,15 +181,18 @@ impl IntcodeProgram {
         };
     }
 
-    pub fn run(self, input: Vec<isize>) -> Vec<isize> {
-        let mut program = self;
-        program.input = input;
+    pub fn run(&mut self, input: Vec<isize>) -> IntcodeResult {
+        self.input = input;
 
-        while program.has_next_instruction() {
-            program.run_instruction();
+        while self.has_next_instruction() {
+            self.run_instruction();
+
+            if let Some(output) = self.output.take() {
+                return IntcodeResult::Suspend(output);
+            }
         }
 
-        program.output
+        IntcodeResult::Halt
     }
 }
 
