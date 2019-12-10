@@ -6,6 +6,7 @@ static INPUT_STR: &str = include_str!("../input.txt");
 
 fn main() {
     println!("Problem 1:\n{:?}", run_from_str(INPUT_STR, vec![1]));
+    println!("Problem 1:\n{:?}", run_from_str(INPUT_STR, vec![2]));
 }
 
 fn read_program(program_str: &str) -> IntcodeProgram {

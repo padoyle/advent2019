@@ -1,5 +1,7 @@
 use std::fmt;
 
+const DEBUG: bool = false;
+
 pub fn parse_op(opcode: isize) -> (usize, Vec<ArgMode>) {
     let op = (opcode % 100) as usize;
     let num_args = match op {
@@ -88,7 +90,7 @@ impl IntcodeProgram {
         } else if mode == MODE_IMM {
             ptr
         } else if mode == MODE_REL {
-            self.get_value((ptr as isize + self.relative_base) as usize) as usize
+            (self.get_value(ptr) + self.relative_base) as usize
         } else {
             unreachable!("invalid arg mode {}", mode);
         }
@@ -104,10 +106,14 @@ impl IntcodeProgram {
         let a = self.get_arg(ptr, arg_modes[0]);
         let b = self.get_arg(ptr + 1, arg_modes[1]);
 
-        // arg 3 is always positional, and works a bit differently since
-        // we store the value instead of reading it
         let dest = self.get_target_address(ptr + 2, arg_modes[2]);
         self.set_value(dest, a + b);
+
+        if DEBUG {
+            println!("\tArgs: {} {} {}", a, b, dest);
+            println!("\tResult: {}", a + b);
+        }
+
         self.exec_ptr += 3;
     }
 
@@ -116,22 +122,31 @@ impl IntcodeProgram {
         let a = self.get_arg(ptr, arg_modes[0]);
         let b = self.get_arg(ptr + 1, arg_modes[1]);
 
-        // arg 3 is always positional, and works a bit differently since
-        // we store the value instead of reading it
         let dest = self.get_target_address(ptr + 2, arg_modes[2]);
         self.set_value(dest, a * b);
+
+        if DEBUG {
+            println!("\tArgs: {} {} {}", a, b, dest);
+            println!("\tResult: {}", a * b);
+        }
+
         self.exec_ptr += 3;
     }
 
-    fn op_input(&mut self, _arg_modes: Vec<ArgMode>) {
+    fn op_input(&mut self, arg_modes: Vec<ArgMode>) {
         let ptr = self.exec_ptr;
-        let dest = self.get_value(ptr) as usize;
+        let dest = self.get_target_address(ptr, arg_modes[0]);
 
         let value = self
             .input
             .pop()
             .expect("Program required input but none was remaining");
         self.set_value(dest, value);
+
+        if DEBUG {
+            println!("\tArgs: {}", dest);
+            println!("\tInput: {}", value);
+        }
 
         self.exec_ptr += 1;
     }
@@ -141,12 +156,23 @@ impl IntcodeProgram {
         let output_value = self.get_arg(ptr, arg_modes[0]);
 
         self.output = Some(output_value);
+
+        if DEBUG {
+            println!("\tOutput: {}", output_value);
+        }
+
         self.exec_ptr += 1;
     }
 
     fn op_jump_if_true(&mut self, arg_modes: Vec<ArgMode>) {
         let ptr = self.exec_ptr;
-        let condition = self.get_arg(ptr, arg_modes[0]) != 0;
+        let arg = self.get_arg(ptr, arg_modes[0]);
+        let condition = arg != 0;
+
+        if DEBUG {
+            println!("\tArgs: {}", condition);
+            println!("\tWill jump: {}", condition);
+        }
 
         if condition {
             // Jump to the designated location
@@ -159,7 +185,13 @@ impl IntcodeProgram {
 
     fn op_jump_if_false(&mut self, arg_modes: Vec<ArgMode>) {
         let ptr = self.exec_ptr;
-        let condition = self.get_arg(ptr, arg_modes[0]) == 0;
+        let arg = self.get_arg(ptr, arg_modes[0]);
+        let condition = arg == 0;
+
+        if DEBUG {
+            println!("\tArgs: {}", condition);
+            println!("\tWill jump: {}", condition);
+        }
 
         if condition {
             // Jump to the designated location
@@ -179,6 +211,11 @@ impl IntcodeProgram {
         let dest = self.get_target_address(ptr + 2, arg_modes[2]);
         self.set_value(dest, result);
 
+        if DEBUG {
+            println!("\tArgs: {} {} {}", a, b, dest);
+            println!("\tResult: {}", result);
+        }
+
         self.exec_ptr += 3;
     }
 
@@ -191,6 +228,11 @@ impl IntcodeProgram {
         let dest = self.get_target_address(ptr + 2, arg_modes[2]);
         self.set_value(dest, result);
 
+        if DEBUG {
+            println!("\tArgs: {} {} {}", a, b, dest);
+            println!("\tResult: {}", result);
+        }
+
         self.exec_ptr += 3;
     }
 
@@ -200,6 +242,11 @@ impl IntcodeProgram {
 
         self.relative_base += arg_value;
 
+        if DEBUG {
+            println!("\tArgs: {}", arg_value);
+            println!("\tRelative base: {}", self.relative_base);
+        }
+
         self.exec_ptr += 1;
     }
 
@@ -207,10 +254,9 @@ impl IntcodeProgram {
         let (opcode, arg_modes) = parse_op(self.ops[self.exec_ptr]);
         self.exec_ptr += 1;
 
-        println!(
-            "Execute op: {} {:?}; rb: {}",
-            opcode, arg_modes, self.relative_base
-        );
+        if DEBUG {
+            println!("Execute op {:?} {}", arg_modes, opcode);
+        }
 
         match opcode {
             1 => self.op_add(arg_modes),
@@ -230,14 +276,15 @@ impl IntcodeProgram {
     }
 
     pub fn run(&mut self, input: Vec<isize>) -> IntcodeResult {
-        println!("Run with input: {:?}", input);
+        if DEBUG {
+            println!("Run with input: {:?}", input);
+        }
         self.input = input;
 
         while self.has_next_instruction() {
             self.run_instruction();
 
             if let Some(output) = self.output.take() {
-                println!("Output: {}", output);
                 return IntcodeResult::Suspend(output);
             }
         }
